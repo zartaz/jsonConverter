@@ -1,0 +1,18 @@
+{
+  "name": "mpamias",
+  "version": "1.0.0",
+  "description": "script to download and convert large json to csv or xml",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "zartas",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.4.0",
+    "express": "^4.18.2",
+    "js2xmlparser": "^5.0.0",
+    "json2csv": "^6.0.0-alpha.2",
+    "nodemon": "^3.0.1"
+  }
+}
