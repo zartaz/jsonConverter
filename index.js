@@ -1,8 +1,12 @@
 const express = require('express');
-const axios = require('axios');
-const { Parser } = require('json2csv');
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const { Transform } = require('json2csv');
 const js2xmlparser = require('js2xmlparser');
-const fs = require('fs').promises;
+const JSONStream = require('JSONStream');
+const nanoid = require('nanoid').nanoid;
 const PORT = 3000;
 const app = express();
 
@@ -27,29 +31,44 @@ app.get('/', (req, res) => {
     `);
 });
 
-app.post('/convert', async (req, res) => {
+app.post('/convert', (req, res) => {
     try {
         const config = {};
         if (req.body.bearerToken) {
             config.headers = { Authorization: `Bearer ${req.body.bearerToken}` };
         }
 
-        const jsonData = await axios.get(req.body.jsonUrl, config);
         let output;
         let filename;
+        let parser;
 
         if (req.body.format === 'csv') {
-            const parser = new Parser();
-            output = parser.parse(jsonData.data);
+            parser = new Transform();
             filename = 'output.csv';
         } else if (req.body.format === 'xml') {
-            output = js2xmlparser.parse("root", jsonData.data);
+            parser = JSONStream.parse('*');
+            output = new Transform({
+                transform: (data) => js2xmlparser.parse("item", data)
+            });
             filename = 'output.xml';
         }
 
-        await fs.writeFile(filename, output);
+        // Create a unique directory for this request
+        const dir = path.join('.', nanoid());
+        fs.mkdirSync(dir);
 
-        res.download(filename);
+        // Create a write stream for the file in the new directory
+        const writeStream = fs.createWriteStream(path.join(dir, filename));
+
+        // Create the request 
+        let requester = req.body.jsonUrl.startsWith('https') ? https : http;
+        requester.get(req.body.jsonUrl, config, (response) => {
+            response
+            .pipe(parser)
+            .pipe(output)
+            .pipe(writeStream)
+            .on('finish', () => res.download(path.join(dir, filename)));
+        });
     } catch (error) {
         console.error(error);
         res.status(500).send('An error occurred.');
