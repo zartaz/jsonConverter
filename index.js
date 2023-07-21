@@ -1,12 +1,14 @@
 const express = require('express');
 const http = require('http');
 const https = require('https');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const { Transform } = require('json2csv');
 const js2xmlparser = require('js2xmlparser');
 const JSONStream = require('JSONStream');
 const nanoid = require('nanoid').nanoid;
+const util = require('util');
+const streamPipeline = util.promisify(require('stream').pipeline);
 const PORT = 3000;
 const app = express();
 
@@ -31,7 +33,7 @@ app.get('/', (req, res) => {
     `);
 });
 
-app.post('/convert', (req, res) => {
+app.post('/convert', async (req, res) => {
     try {
         const config = {};
         if (req.body.bearerToken) {
@@ -55,20 +57,17 @@ app.post('/convert', (req, res) => {
 
         // Create a unique directory for this request
         const dir = path.join('.', nanoid());
-        fs.mkdirSync(dir);
+        await fs.mkdir(dir);
 
         // Create a write stream for the file in the new directory
         const writeStream = fs.createWriteStream(path.join(dir, filename));
 
         // Create the request 
         let requester = req.body.jsonUrl.startsWith('https') ? https : http;
-        requester.get(req.body.jsonUrl, config, (response) => {
-            response
-            .pipe(parser)
-            .pipe(output)
-            .pipe(writeStream)
-            .on('finish', () => res.download(path.join(dir, filename)));
-        });
+        const response = await requester.get(req.body.jsonUrl, config);
+        await streamPipeline(response, parser, output, writeStream);
+
+        res.download(path.join(dir, filename));
     } catch (error) {
         console.error(error);
         res.status(500).send('An error occurred.');
